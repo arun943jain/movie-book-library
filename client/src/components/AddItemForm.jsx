@@ -11,14 +11,14 @@ function AddItemForm({
     type: "Movie",
     genre: "",
     rating: "",
-    image: "",
+    poster: "",
     year: "",
     runtime: "",
-    pages: "",
-    description: "",
     director: "",
-    author: "",
+    description: "",
   });
+
+  const [imageStatus, setImageStatus] = useState("idle");
 
   useEffect(() => {
     if (editingItem) {
@@ -27,13 +27,19 @@ function AddItemForm({
         type: editingItem.type || "Movie",
         genre: editingItem.genre || "",
         rating: editingItem.rating || "",
-        image: editingItem.image || "",
-        year: editingItem.year || "",
+        poster:
+          editingItem.poster ||
+          editingItem.posterUrl ||
+          editingItem.imageUrl ||
+          editingItem.image ||
+          "",
+        year:
+          editingItem.year ||
+          editingItem.releaseYear ||
+          "",
         runtime: editingItem.runtime || "",
-        pages: editingItem.pages || "",
-        description: editingItem.description || "",
         director: editingItem.director || "",
-        author: editingItem.author || "",
+        description: editingItem.description || "",
       });
     } else {
       setFormData({
@@ -41,15 +47,15 @@ function AddItemForm({
         type: "Movie",
         genre: "",
         rating: "",
-        image: "",
+        poster: "",
         year: "",
         runtime: "",
-        pages: "",
-        description: "",
         director: "",
-        author: "",
+        description: "",
       });
     }
+
+    setImageStatus("idle");
   }, [editingItem]);
 
   const handleChange = (event) => {
@@ -59,6 +65,18 @@ function AddItemForm({
       ...previousData,
       [name]: value,
     }));
+
+    if (name === "poster") {
+      setImageStatus(value.trim() ? "loading" : "idle");
+    }
+  };
+
+  const handleImageLoad = () => {
+    setImageStatus("success");
+  };
+
+  const handleImageError = () => {
+    setImageStatus("error");
   };
 
   const handleSubmit = (event) => {
@@ -79,32 +97,16 @@ function AddItemForm({
       return;
     }
 
-    if (formData.type === "Movie" && !formData.director.trim()) {
-      alert("Please enter the director.");
-      return;
-    }
-
-    if (formData.type === "Book" && !formData.author.trim()) {
-      alert("Please enter the author.");
-      return;
-    }
-
     const itemData = {
       title: formData.title.trim(),
       type: formData.type,
       genre: formData.genre.trim(),
       rating: Number(formData.rating),
-      image: formData.image.trim(),
-      year: formData.year
-        ? Number(formData.year)
-        : "",
+      poster: formData.poster.trim(),
+      year: formData.year.trim(),
       runtime: formData.runtime.trim(),
-      pages: formData.pages
-        ? Number(formData.pages)
-        : "",
-      description: formData.description.trim(),
       director: formData.director.trim(),
-      author: formData.author.trim(),
+      description: formData.description.trim(),
     };
 
     if (editingItem) {
@@ -112,24 +114,9 @@ function AddItemForm({
         ...editingItem,
         ...itemData,
       });
-      return;
+    } else {
+      onAdd(itemData);
     }
-
-    onAdd(itemData);
-
-    setFormData({
-      title: "",
-      type: "Movie",
-      genre: "",
-      rating: "",
-      image: "",
-      year: "",
-      runtime: "",
-      pages: "",
-      description: "",
-      director: "",
-      author: "",
-    });
   };
 
   return (
@@ -139,14 +126,12 @@ function AddItemForm({
     >
       <div
         className="modal"
-        onClick={(event) =>
-          event.stopPropagation()
-        }
+        onClick={(event) => event.stopPropagation()}
       >
         <button
+          type="button"
           className="close-button"
           onClick={onClose}
-          type="button"
         >
           ×
         </button>
@@ -159,7 +144,6 @@ function AddItemForm({
 
         <form onSubmit={handleSubmit}>
 
-          {/* Title */}
           <div className="form-group">
             <label>Title</label>
 
@@ -172,7 +156,6 @@ function AddItemForm({
             />
           </div>
 
-          {/* Type */}
           <div className="form-group">
             <label>Type</label>
 
@@ -181,17 +164,11 @@ function AddItemForm({
               value={formData.type}
               onChange={handleChange}
             >
-              <option value="Movie">
-                Movie
-              </option>
-
-              <option value="Book">
-                Book
-              </option>
+              <option value="Movie">Movie</option>
+              <option value="Book">Book</option>
             </select>
           </div>
 
-          {/* Genre */}
           <div className="form-group">
             <label>Genre</label>
 
@@ -204,7 +181,6 @@ function AddItemForm({
             />
           </div>
 
-          {/* Rating */}
           <div className="form-group">
             <label>Rating</label>
 
@@ -213,10 +189,7 @@ function AddItemForm({
               value={formData.rating}
               onChange={handleChange}
             >
-              <option value="">
-                Select rating
-              </option>
-
+              <option value="">Select rating</option>
               <option value="5">⭐ 5</option>
               <option value="4.5">⭐ 4.5</option>
               <option value="4">⭐ 4</option>
@@ -229,103 +202,120 @@ function AddItemForm({
             </select>
           </div>
 
-          {/* Image */}
-          <div className="form-group">
-            <label>Poster / Cover Image URL</label>
-
-            <input
-              type="url"
-              name="image"
-              placeholder="Paste image URL"
-              value={formData.image}
-              onChange={handleChange}
-            />
-          </div>
-
-          {/* Year */}
+          {/* POSTER URL */}
           <div className="form-group">
             <label>
-              {formData.type === "Movie"
-                ? "Release Year"
-                : "Publication Year"}
+              Poster / Cover Image URL
             </label>
 
             <input
-              type="number"
+              type="url"
+              name="poster"
+              placeholder="Paste direct poster image URL"
+              value={formData.poster}
+              onChange={handleChange}
+            />
+
+            <small>
+              Paste a direct image link. The URL does not need
+              to end with .jpg or .png.
+            </small>
+
+            {/* LIVE IMAGE PREVIEW */}
+            {formData.poster.trim() && (
+              <div
+                style={{
+                  marginTop: "12px",
+                  textAlign: "center",
+                }}
+              >
+                <img
+                  src={formData.poster.trim()}
+                  alt="Poster preview"
+                  onLoad={handleImageLoad}
+                  onError={handleImageError}
+                  style={{
+                    width: "140px",
+                    height: "190px",
+                    objectFit: "cover",
+                    borderRadius: "10px",
+                    border: "1px solid rgba(255,255,255,0.2)",
+                    display:
+                      imageStatus === "error"
+                        ? "none"
+                        : "inline-block",
+                  }}
+                />
+
+                {imageStatus === "loading" && (
+                  <p>
+                    Loading poster...
+                  </p>
+                )}
+
+                {imageStatus === "success" && (
+                  <p
+                    style={{
+                      color: "#7CFF8A",
+                      marginTop: "6px",
+                    }}
+                  >
+                    ✓ Poster loaded successfully
+                  </p>
+                )}
+
+                {imageStatus === "error" && (
+                  <p
+                    style={{
+                      color: "#ff6b6b",
+                      marginTop: "6px",
+                    }}
+                  >
+                    ✕ Image could not be loaded.
+                    <br />
+                    Make sure this is a direct image URL.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="form-group">
+            <label>Release Year</label>
+
+            <input
+              type="text"
               name="year"
-              placeholder={
-                formData.type === "Movie"
-                  ? "e.g. 2024"
-                  : "e.g. 1997"
-              }
+              placeholder="e.g. 2024"
               value={formData.year}
               onChange={handleChange}
-              min="0"
             />
           </div>
 
-          {/* Movie Runtime */}
-          {formData.type === "Movie" && (
-            <div className="form-group">
-              <label>Runtime</label>
+          <div className="form-group">
+            <label>Runtime</label>
 
-              <input
-                type="text"
-                name="runtime"
-                placeholder="e.g. 2h 49m"
-                value={formData.runtime}
-                onChange={handleChange}
-              />
-            </div>
-          )}
+            <input
+              type="text"
+              name="runtime"
+              placeholder="e.g. 2h 49m"
+              value={formData.runtime}
+              onChange={handleChange}
+            />
+          </div>
 
-          {/* Book Pages */}
-          {formData.type === "Book" && (
-            <div className="form-group">
-              <label>Pages</label>
+          <div className="form-group">
+            <label>Director</label>
 
-              <input
-                type="number"
-                name="pages"
-                placeholder="e.g. 309"
-                value={formData.pages}
-                onChange={handleChange}
-                min="1"
-              />
-            </div>
-          )}
+            <input
+              type="text"
+              name="director"
+              placeholder="Enter director name"
+              value={formData.director}
+              onChange={handleChange}
+            />
+          </div>
 
-          {/* Movie Director */}
-          {formData.type === "Movie" && (
-            <div className="form-group">
-              <label>Director</label>
-
-              <input
-                type="text"
-                name="director"
-                placeholder="Enter director name"
-                value={formData.director}
-                onChange={handleChange}
-              />
-            </div>
-          )}
-
-          {/* Book Author */}
-          {formData.type === "Book" && (
-            <div className="form-group">
-              <label>Author</label>
-
-              <input
-                type="text"
-                name="author"
-                placeholder="Enter author name"
-                value={formData.author}
-                onChange={handleChange}
-              />
-            </div>
-          )}
-
-          {/* Description */}
           <div className="form-group">
             <label>Description</label>
 
@@ -334,11 +324,10 @@ function AddItemForm({
               placeholder="Enter a short description"
               value={formData.description}
               onChange={handleChange}
-              rows="4"
+              rows="3"
             />
           </div>
 
-          {/* Buttons */}
           <div className="form-buttons">
 
             <button
