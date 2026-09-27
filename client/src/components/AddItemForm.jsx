@@ -23,23 +23,42 @@ function AddItemForm({
   useEffect(() => {
     if (editingItem) {
       setFormData({
-        title: editingItem.title || "",
+        title: String(editingItem.title || ""),
         type: editingItem.type || "Movie",
-        genre: editingItem.genre || "",
-        rating: editingItem.rating || "",
-        poster:
+        genre: String(editingItem.genre || ""),
+        rating:
+          editingItem.rating !== undefined &&
+          editingItem.rating !== null
+            ? String(editingItem.rating)
+            : "",
+        poster: String(
           editingItem.poster ||
-          editingItem.posterUrl ||
-          editingItem.imageUrl ||
-          editingItem.image ||
-          "",
+            editingItem.posterUrl ||
+            editingItem.imageUrl ||
+            editingItem.image ||
+            ""
+        ),
         year:
-          editingItem.year ||
-          editingItem.releaseYear ||
-          "",
-        runtime: editingItem.runtime || "",
-        director: editingItem.director || "",
-        description: editingItem.description || "",
+          editingItem.year !== undefined &&
+          editingItem.year !== null
+            ? String(editingItem.year)
+            : editingItem.releaseYear !== undefined &&
+              editingItem.releaseYear !== null
+            ? String(editingItem.releaseYear)
+            : "",
+        runtime: String(
+          editingItem.runtime ||
+            editingItem.runtimeOrPages ||
+            ""
+        ),
+        director: String(
+          editingItem.director ||
+            editingItem.directorOrAuthor ||
+            ""
+        ),
+        description: String(
+          editingItem.description || ""
+        ),
       });
     } else {
       setFormData({
@@ -67,7 +86,9 @@ function AddItemForm({
     }));
 
     if (name === "poster") {
-      setImageStatus(value.trim() ? "loading" : "idle");
+      setImageStatus(
+        value.trim() ? "loading" : "idle"
+      );
     }
   };
 
@@ -79,15 +100,29 @@ function AddItemForm({
     setImageStatus("error");
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
 
-    if (!formData.title.trim()) {
+    console.log("Update/Add form submitted");
+    console.log("Editing item:", editingItem);
+    console.log("Form data:", formData);
+
+    const title = String(formData.title || "").trim();
+    const genre = String(formData.genre || "").trim();
+    const poster = String(formData.poster || "").trim();
+    const year = String(formData.year || "").trim();
+    const runtime = String(formData.runtime || "").trim();
+    const director = String(formData.director || "").trim();
+    const description = String(
+      formData.description || ""
+    ).trim();
+
+    if (!title) {
       alert("Please enter a title.");
       return;
     }
 
-    if (!formData.genre.trim()) {
+    if (!genre) {
       alert("Please enter a genre.");
       return;
     }
@@ -98,24 +133,59 @@ function AddItemForm({
     }
 
     const itemData = {
-      title: formData.title.trim(),
-      type: formData.type,
-      genre: formData.genre.trim(),
+      title,
+      type: formData.type || "Movie",
+      genre,
       rating: Number(formData.rating),
-      poster: formData.poster.trim(),
-      year: formData.year.trim(),
-      runtime: formData.runtime.trim(),
-      director: formData.director.trim(),
-      description: formData.description.trim(),
+      poster,
+      year,
+      runtime,
+      director,
+      description,
     };
 
-    if (editingItem) {
-      onUpdate({
-        ...editingItem,
-        ...itemData,
-      });
-    } else {
-      onAdd(itemData);
+    console.log("Prepared item data:", itemData);
+
+    try {
+      if (editingItem) {
+        const itemId =
+          editingItem._id || editingItem.id;
+
+        if (!itemId) {
+          alert(
+            "Unable to update item: item ID is missing."
+          );
+          return;
+        }
+
+        console.log(
+          "Calling onUpdate with ID:",
+          itemId
+        );
+
+        await onUpdate({
+          ...editingItem,
+          ...itemData,
+          _id: itemId,
+        });
+      } else {
+        console.log(
+          "Calling onAdd with:",
+          itemData
+        );
+
+        await onAdd(itemData);
+      }
+    } catch (error) {
+      console.error(
+        "Form submission error:",
+        error
+      );
+
+      alert(
+        error.message ||
+          "Something went wrong while saving the item."
+      );
     }
   };
 
@@ -126,7 +196,9 @@ function AddItemForm({
     >
       <div
         className="modal"
-        onClick={(event) => event.stopPropagation()}
+        onClick={(event) =>
+          event.stopPropagation()
+        }
       >
         <button
           type="button"
@@ -164,8 +236,13 @@ function AddItemForm({
               value={formData.type}
               onChange={handleChange}
             >
-              <option value="Movie">Movie</option>
-              <option value="Book">Book</option>
+              <option value="Movie">
+                Movie
+              </option>
+
+              <option value="Book">
+                Book
+              </option>
             </select>
           </div>
 
@@ -189,16 +266,45 @@ function AddItemForm({
               value={formData.rating}
               onChange={handleChange}
             >
-              <option value="">Select rating</option>
-              <option value="5">⭐ 5</option>
-              <option value="4.5">⭐ 4.5</option>
-              <option value="4">⭐ 4</option>
-              <option value="3.5">⭐ 3.5</option>
-              <option value="3">⭐ 3</option>
-              <option value="2.5">⭐ 2.5</option>
-              <option value="2">⭐ 2</option>
-              <option value="1.5">⭐ 1.5</option>
-              <option value="1">⭐ 1</option>
+              <option value="">
+                Select rating
+              </option>
+
+              <option value="5">
+                ⭐ 5
+              </option>
+
+              <option value="4.5">
+                ⭐ 4.5
+              </option>
+
+              <option value="4">
+                ⭐ 4
+              </option>
+
+              <option value="3.5">
+                ⭐ 3.5
+              </option>
+
+              <option value="3">
+                ⭐ 3
+              </option>
+
+              <option value="2.5">
+                ⭐ 2.5
+              </option>
+
+              <option value="2">
+                ⭐ 2
+              </option>
+
+              <option value="1.5">
+                ⭐ 1.5
+              </option>
+
+              <option value="1">
+                ⭐ 1
+              </option>
             </select>
           </div>
 
@@ -217,8 +323,8 @@ function AddItemForm({
             />
 
             <small>
-              Paste a direct image link. The URL does not need
-              to end with .jpg or .png.
+              Paste a direct image link. The URL does
+              not need to end with .jpg or .png.
             </small>
 
             {/* LIVE IMAGE PREVIEW */}
@@ -239,7 +345,8 @@ function AddItemForm({
                     height: "190px",
                     objectFit: "cover",
                     borderRadius: "10px",
-                    border: "1px solid rgba(255,255,255,0.2)",
+                    border:
+                      "1px solid rgba(255,255,255,0.2)",
                     display:
                       imageStatus === "error"
                         ? "none"
@@ -273,7 +380,8 @@ function AddItemForm({
                   >
                     ✕ Image could not be loaded.
                     <br />
-                    Make sure this is a direct image URL.
+                    Make sure this is a direct image
+                    URL.
                   </p>
                 )}
               </div>
