@@ -6,17 +6,63 @@ import Item from "../models/Item.js";
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 
 // =====================================================
+// FRONTEND COMPATIBILITY HELPERS
+// Frontend sends `runtime` + `director`.
+// MongoDB stores `runtimeOrPages` + `directorOrAuthor`.
+// =====================================================
+
+// Map frontend field names to internal storage names before saving.
+// - `runtime`  -> `runtimeOrPages`
+// - `director` -> `directorOrAuthor`
+// If both the alias and the canonical field are sent, the canonical
+// field wins. Alias keys are removed so only canonical fields are stored.
+export const normalizeItemInput = (body) => {
+  const data = { ...body };
+
+  if (data.runtimeOrPages === undefined && data.runtime !== undefined) {
+    data.runtimeOrPages = data.runtime;
+  }
+
+  if (data.directorOrAuthor === undefined && data.director !== undefined) {
+    data.directorOrAuthor = data.director;
+  }
+
+  delete data.runtime;
+  delete data.director;
+
+  return data;
+};
+
+// Add frontend-friendly aliases to outgoing data (no DB change).
+// - `runtime`  = `runtimeOrPages`
+// - `director` = `directorOrAuthor`
+// Works with both Mongoose documents and plain (lean) objects.
+export const withCompatibilityFields = (item) => {
+  if (!item) return item;
+
+  const obj =
+    typeof item.toObject === "function" ? item.toObject() : { ...item };
+
+  obj.runtime = obj.runtimeOrPages ?? "";
+  obj.director = obj.directorOrAuthor ?? "";
+
+  return obj;
+};
+
+// =====================================================
 // @desc    Create a new movie/book
 // @route   POST /api/items
 // @access  Public
 // =====================================================
 export const createItem = async (req, res, next) => {
   try {
-    const newItem = await Item.create(req.body);
+    // Normalize frontend aliases (`runtime`/`director`) to storage
+    // fields (`runtimeOrPages`/`directorOrAuthor`) before saving.
+    const newItem = await Item.create(normalizeItemInput(req.body));
 
     return res.status(201).json({
       success: true,
-      data: newItem,
+      data: withCompatibilityFields(newItem),
     });
   } catch (error) {
     // Forward to centralized error handler (handles ValidationError, etc.)
@@ -34,7 +80,7 @@ export const createItem = async (req, res, next) => {
 //   /api/items?search=harry
 //   /api/items?genre=Action
 //   /api/items?type=Movie
-//   /api/items?rating=8            (rating >= 8)
+//   /api/items?rating=4            (rating >= 4, scale is 1-5)
 //   /api/items?page=1&limit=6
 //   /api/items?sort=newest | oldest | rating
 // =====================================================
@@ -77,7 +123,7 @@ export const getAllItems = async (req, res, next) => {
     }
 
     // 4) RATING FILTER: return items with rating >= requested value
-    //    e.g. ?rating=8 returns items rated 8, 9, 10
+    //    e.g. ?rating=4 returns items rated 4, 4.5, 5 (scale is 1-5)
     if (rating !== undefined && rating !== "") {
       const ratingNumber = Number(rating);
       if (Number.isNaN(ratingNumber)) {
@@ -116,10 +162,18 @@ export const getAllItems = async (req, res, next) => {
 
     // ---- Execute query ----
     const totalItems = await Item.countDocuments(filter);
-    const items = await Item.find(filter)
+    // `.lean()` returns plain JS objects (faster, and easy to extend
+    // with frontend alias fields below without touching the schema).
+    const docs = await Item.find(filter)
       .sort(sortOption)
       .skip(skip)
-      .limit(limitNumber);
+      .limit(limitNumber)
+      .lean();
+
+    // Attach frontend aliases (`runtime`, `director`) alongside the
+    // stored fields (`runtimeOrPages`, `directorOrAuthor`). Covers list,
+    // search, filtered and paginated results — they all flow through here.
+    const items = docs.map(withCompatibilityFields);
 
     const totalPages = Math.ceil(totalItems / limitNumber) || 0;
 
@@ -156,7 +210,7 @@ export const getItemById = async (req, res, next) => {
       });
     }
 
-    const item = await Item.findById(id);
+    const item = await Item.findById(id).lean();
 
     if (!item) {
       return res.status(404).json({
@@ -167,7 +221,7 @@ export const getItemById = async (req, res, next) => {
 
     return res.status(200).json({
       success: true,
-      data: item,
+      data: withCompatibilityFields(item),
     });
   } catch (error) {
     next(error);
@@ -190,12 +244,18 @@ export const updateItem = async (req, res, next) => {
       });
     }
 
+    // Normalize frontend aliases (`runtime`/`director`) so they update
+    // the stored fields (`runtimeOrPages`/`directorOrAuthor`).
     // `new: true` returns the updated document.
     // `runValidators: true` enforces schema rules (enum, min/max, required) on update.
-    const updatedItem = await Item.findByIdAndUpdate(id, req.body, {
-      new: true,
-      runValidators: true,
-    });
+    const updatedItem = await Item.findByIdAndUpdate(
+      id,
+      normalizeItemInput(req.body),
+      {
+        new: true,
+        runValidators: true,
+      }
+    );
 
     if (!updatedItem) {
       return res.status(404).json({
@@ -206,7 +266,7 @@ export const updateItem = async (req, res, next) => {
 
     return res.status(200).json({
       success: true,
-      data: updatedItem,
+      data: withCompatibilityFields(updatedItem),
     });
   } catch (error) {
     next(error);
@@ -241,7 +301,7 @@ export const deleteItem = async (req, res, next) => {
     return res.status(200).json({
       success: true,
       message: "Item deleted successfully",
-      data: deletedItem,
+      data: withCompatibilityFields(deletedItem),
     });
   } catch (error) {
     next(error);

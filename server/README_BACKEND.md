@@ -56,18 +56,28 @@ Server runs at: `http://localhost:5000`
 
 ## 3. Data Model (`Item`)
 
-| Field             | Type   | Rules                                |
-| ----------------- | ------ | ------------------------------------ |
-| `title`           | String | required, trim                       |
-| `type`            | String | required, enum `["Movie", "Book"]`   |
-| `genre`           | String | required                             |
-| `rating`          | Number | required, min `1`, max `10`          |
-| `poster`          | String | optional URL                         |
-| `year`            | Number | optional                             |
-| `directorOrAuthor`| String | optional                             |
-| `runtimeOrPages`  | String | optional (e.g. `"181 min"`, `"309 pages"`) |
-| `description`     | String | optional                             |
-| `createdAt` / `updatedAt` | Date | automatic via `timestamps: true` |
+| Field             | Type   | Rules                                                        |
+| ----------------- | ------ | ------------------------------------------------------------ |
+| `title`           | String | required, trim                                               |
+| `type`            | String | required, enum `["Movie", "Book"]`                           |
+| `genre`           | String | required                                                     |
+| `rating`          | Number | required, min `1`, max `5` (decimals allowed: 1, 1.5, 2, … 4.5, 5) |
+| `poster`          | String | optional URL                                                 |
+| `year`            | Number | optional                                                     |
+| `directorOrAuthor`| String | optional — **internal storage** (see aliases below)          |
+| `runtimeOrPages`  | String | optional — **internal storage** (e.g. `"2h 30m"`, `"309 pages"`) |
+| `description`     | String | optional                                                     |
+| `createdAt` / `updatedAt` | Date | automatic via `timestamps: true`                         |
+
+### Compatibility aliases (frontend ↔ backend)
+
+| Frontend field | Stored as (MongoDB) | Direction                     |
+| -------------- | ------------------- | ----------------------------- |
+| `runtime`      | `runtimeOrPages`    | accepted on POST/PUT, returned on GET |
+| `director`     | `directorOrAuthor`  | accepted on POST/PUT, returned on GET |
+
+- On **POST/PUT** you may send either name. `runtime` is saved as `runtimeOrPages`, `director` is saved as `directorOrAuthor`. If both versions are present, the canonical name (`runtimeOrPages` / `directorOrAuthor`) is the source of truth.
+- On **GET** responses every item contains **both** names: `runtime` mirrors `runtimeOrPages`, and `director` mirrors `directorOrAuthor` — single item, list, search, filtered and paginated results alike — so the frontend consumes the API with no mapping.
 
 ---
 
@@ -108,6 +118,25 @@ Paginated list (`GET /api/items`) returns:
 
 > `data` is an alias of `items` so the paginated response also matches the standard `{ success, data }` shape.
 
+Each item in a GET response contains both the stored and frontend field names:
+
+```json
+{
+  "_id": "64f000000000000000000001",
+  "title": "Inception",
+  "type": "Movie",
+  "genre": "Sci-Fi",
+  "rating": 4.5,
+  "poster": "https://example.com/poster.jpg",
+  "year": 2024,
+  "directorOrAuthor": "Christopher Nolan",
+  "director": "Christopher Nolan",
+  "runtimeOrPages": "2h 30m",
+  "runtime": "2h 30m",
+  "description": "A mind-bending thriller"
+}
+```
+
 Failure:
 
 ```json
@@ -126,14 +155,14 @@ Failure:
 | Search     | `?search=harry`                  | Regex (case-insensitive) on `title` + `directorOrAuthor` |
 | Genre      | `?genre=Action`                  | Exact match, case-insensitive             |
 | Type       | `?type=Movie` / `?type=Book`     | Exact enum match                          |
-| Rating     | `?rating=8`                      | `rating >= 8`                             |
+| Rating     | `?rating=4`                      | `rating >= 4` (scale is 1–5)              |
 | Pagination | `?page=1&limit=6`                | Defaults `page=1`, `limit=6`, max `50`    |
 | Sort       | `?sort=newest`                   | `newest` (default), `oldest`, `rating`    |
 
 Combine them freely:
 
 ```text
-/api/items?search=russo&type=Movie&genre=Action&rating=8&page=1&limit=6&sort=rating
+/api/items?search=nolan&type=Movie&genre=Sci-Fi&rating=4&page=1&limit=6&sort=rating
 ```
 
 ---
@@ -151,17 +180,21 @@ Combine them freely:
 
 **POST** `{{baseUrl}}/api/items`
 
+Send the **exact frontend payload** — no mapping needed. The backend stores
+`runtime` as `runtimeOrPages` and `director` as `directorOrAuthor` automatically
+(the canonical names work too).
+
 ```json
 {
-  "title": "Avengers Endgame",
+  "title": "Inception",
   "type": "Movie",
-  "genre": "Action",
-  "rating": 9,
+  "genre": "Sci-Fi",
+  "rating": 4.5,
   "poster": "https://example.com/poster.jpg",
-  "year": 2019,
-  "directorOrAuthor": "Russo Brothers",
-  "runtimeOrPages": "181 min",
-  "description": "Marvel movie"
+  "year": 2024,
+  "runtime": "2h 30m",
+  "director": "Christopher Nolan",
+  "description": "A mind-bending thriller"
 }
 ```
 
@@ -172,14 +205,18 @@ Sample Book body:
   "title": "Harry Potter and the Sorcerer's Stone",
   "type": "Book",
   "genre": "Fantasy",
-  "rating": 10,
+  "rating": 5,
   "poster": "https://example.com/hp1.jpg",
   "year": 1997,
-  "directorOrAuthor": "J.K. Rowling",
-  "runtimeOrPages": "309 pages",
+  "director": "J.K. Rowling",
+  "runtime": "309 pages",
   "description": "First book in the Harry Potter series"
 }
 ```
+
+> `rating` uses the 1–5 scale (allowed: 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5;
+> decimals allowed). Prefer `director` / `runtime`, but `directorOrAuthor` /
+> `runtimeOrPages` are also accepted on POST/PUT.
 
 Expected: `201 Created` with `{ "success": true, "data": {...} }`. Copy the `_id` for the tests below.
 
@@ -198,13 +235,13 @@ Replace `:id` with a real `_id` from the create step.
 | 7 | Genre filter  | GET    | `http://localhost:5000/api/items?genre=Action` |
 | 8 | Type filter (Movie) | GET | `http://localhost:5000/api/items?type=Movie` |
 | 9 | Type filter (Book)  | GET | `http://localhost:5000/api/items?type=Book` |
-| 10 | Rating filter | GET   | `http://localhost:5000/api/items?rating=8` |
+| 10 | Rating filter | GET   | `http://localhost:5000/api/items?rating=4` |
 | 11 | Pagination    | GET    | `http://localhost:5000/api/items?page=1&limit=6` |
 | 12 | Pagination p2 | GET    | `http://localhost:5000/api/items?page=2&limit=6` |
 | 13 | Sort newest   | GET    | `http://localhost:5000/api/items?sort=newest` |
 | 14 | Sort oldest   | GET    | `http://localhost:5000/api/items?sort=oldest` |
 | 15 | Sort by rating| GET    | `http://localhost:5000/api/items?sort=rating` |
-| 16 | Combined      | GET    | `http://localhost:5000/api/items?search=avengers&type=Movie&genre=Action&rating=8&page=1&limit=6&sort=rating` |
+| 16 | Combined      | GET    | `http://localhost:5000/api/items?search=nolan&type=Movie&genre=Sci-Fi&rating=4&page=1&limit=6&sort=rating` |
 
 ### 6.4 Error cases to verify
 
@@ -214,7 +251,7 @@ Replace `:id` with a real `_id` from the create step.
 | Not found | `GET /api/items/64f000000000000000000000` (valid but non-existent) | `404` `{ success:false, message:"Item not found" }` |
 | Validation error | `POST /api/items` with `{}` | `400` with required-field messages |
 | Bad enum | `POST` with `"type": "Song"` | `400` `Type must be either 'Movie' or 'Book'` |
-| Bad rating | `POST` with `"rating": 99` | `400` `Rating cannot be more than 10` |
+| Bad rating | `POST` with `"rating": 5.5` | `400` `Rating cannot be more than 5` |
 | Bad type filter | `GET /api/items?type=Song` | `400` `Type filter must be either...` |
 | Unknown route | `GET /api/unknown` | `404` `Route not found...` |
 
@@ -230,43 +267,41 @@ Replace `:id` with a real `_id` from the create step.
 
 ---
 
-## 8. Frontend Integration Note (recommendation only — no frontend files changed)
+## 8. Frontend Integration (direct compatibility — no mapping needed)
 
-The existing frontend in `client/` currently:
+The frontend sends this payload **as-is** — no mapping code required:
 
-- stores items in `localStorage` (no API calls yet),
-- uses field names `image`, `director`, `author`, `runtime`, `pages` (separate),
-- uses a `1–5` star rating scale.
+```json
+{
+  "title": "Inception",
+  "type": "Movie",
+  "genre": "Sci-Fi",
+  "rating": 4.5,
+  "poster": "https://example.com/poster.jpg",
+  "year": 2024,
+  "runtime": "2h 30m",
+  "director": "Christopher Nolan",
+  "description": "A mind-bending thriller"
+}
+```
 
-The backend spec requires unified fields `poster`, `directorOrAuthor`, `runtimeOrPages` and a `1–10` rating scale.
+Backend behavior:
 
-**Recommended mapping when the Frontend Developer wires the API** (no change made by backend team):
+- `POST` / `PUT`: `runtime` → stored as `runtimeOrPages`, `director` → stored as `directorOrAuthor`. `rating` uses the same 1–5 scale (decimals allowed). `poster`, `year`, `description` pass through unchanged.
+- `GET` (single, list, search, filtered, paginated): every item returns **both** names, so the frontend renders `item.runtime` and `item.director` directly:
 
 ```js
-// Backend -> Frontend (on GET)
-const toFrontend = (item) => ({
-  ...item,
-  id: item._id,
-  image: item.poster,
-  director: item.type === "Movie" ? item.directorOrAuthor : "",
-  author: item.type === "Book" ? item.directorOrAuthor : "",
-  runtime: item.type === "Movie" ? item.runtimeOrPages : "",
-  pages: item.type === "Book" ? parseInt(item.runtimeOrPages) || "" : "",
-  rating: item.rating / 2, // 1-10 backend -> 1-5 frontend stars
-});
-
-// Frontend -> Backend (on POST/PUT)
-const toBackend = (form) => ({
-  title: form.title,
-  type: form.type,
-  genre: form.genre,
-  rating: Number(form.rating) * 2, // 1-5 stars -> 1-10 backend
-  poster: form.image,
-  year: form.year ? Number(form.year) : undefined,
-  directorOrAuthor: form.type === "Movie" ? form.director : form.author,
-  runtimeOrPages: form.type === "Movie" ? form.runtime : String(form.pages),
-  description: form.description,
-});
+// GET /api/items/:id -> res.data.data
+{
+  title: "Inception",
+  rating: 4.5,                    // same 1-5 scale, no conversion
+  poster: "https://...",         // use directly in <img src>
+  runtime: "2h 30m",             // alias of runtimeOrPages
+  runtimeOrPages: "2h 30m",      // stored value (same content)
+  director: "Christopher Nolan", // alias of directorOrAuthor
+  directorOrAuthor: "Christopher Nolan",
+  // ...
+}
 ```
 
 Suggested API base URL for the frontend: `http://localhost:5000/api/items` (via Vite proxy or `fetch`/`axios`).

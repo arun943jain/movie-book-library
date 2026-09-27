@@ -2,6 +2,12 @@ import mongoose from "mongoose";
 
 // Item schema — single collection stores both Movies and Books.
 // The `type` field ("Movie" | "Book") distinguishes them.
+//
+// FRONTEND COMPATIBILITY:
+// - Frontend sends `runtime`  -> stored here as `runtimeOrPages`
+// - Frontend sends `director` -> stored here as `directorOrAuthor`
+// The mapping is done in controllers/itemController.js (normalizeItemInput).
+// Only the canonical fields below are persisted in MongoDB.
 const itemSchema = new mongoose.Schema(
   {
     title: {
@@ -26,7 +32,7 @@ const itemSchema = new mongoose.Schema(
       type: Number,
       required: [true, "Rating is required"],
       min: [1, "Rating must be at least 1"],
-      max: [10, "Rating cannot be more than 10"],
+      max: [5, "Rating cannot be more than 5"],
     },
     poster: {
       type: String,
