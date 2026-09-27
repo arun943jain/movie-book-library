@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
 
-function AddItemForm({ onAdd, onUpdate, onClose, editingItem }) {
+function AddItemForm({
+  onAdd,
+  onUpdate,
+  onClose,
+  editingItem,
+}) {
   const [formData, setFormData] = useState({
     title: "",
     type: "Movie",
@@ -17,25 +22,47 @@ function AddItemForm({ onAdd, onUpdate, onClose, editingItem }) {
 
   useEffect(() => {
     if (editingItem) {
+      // Coerce every field to String so `.trim()` calls below and in
+      // handleSubmit never throw ("...trim is not a function") when the
+      // item came from MongoDB (where `year`/`rating` are Numbers).
+      // Fall back to the backend's canonical names when aliases are absent.
       setFormData({
-        title: editingItem.title || "",
+        title: String(editingItem.title || ""),
         type: editingItem.type || "Movie",
-        genre: editingItem.genre || "",
-        rating: editingItem.rating || "",
-        poster:
+        genre: String(editingItem.genre || ""),
+        rating:
+          editingItem.rating !== undefined &&
+          editingItem.rating !== null
+            ? String(editingItem.rating)
+            : "",
+        poster: String(
           editingItem.poster ||
-          editingItem.posterUrl ||
-          editingItem.imageUrl ||
-          editingItem.image ||
-          "",
-        year: editingItem.year
-          ? String(editingItem.year)
-          : editingItem.releaseYear
+            editingItem.posterUrl ||
+            editingItem.imageUrl ||
+            editingItem.image ||
+            ""
+        ),
+        year:
+          editingItem.year !== undefined &&
+          editingItem.year !== null
+            ? String(editingItem.year)
+            : editingItem.releaseYear !== undefined &&
+              editingItem.releaseYear !== null
             ? String(editingItem.releaseYear)
             : "",
-        runtime: editingItem.runtime || "",
-        director: editingItem.director || "",
-        description: editingItem.description || "",
+        runtime: String(
+          editingItem.runtime ||
+            editingItem.runtimeOrPages ||
+            ""
+        ),
+        director: String(
+          editingItem.director ||
+            editingItem.directorOrAuthor ||
+            ""
+        ),
+        description: String(
+          editingItem.description || ""
+        ),
       });
     } else {
       setFormData({
@@ -63,7 +90,9 @@ function AddItemForm({ onAdd, onUpdate, onClose, editingItem }) {
     }));
 
     if (name === "poster") {
-      setImageStatus(value.trim() ? "loading" : "idle");
+      setImageStatus(
+        value.trim() ? "loading" : "idle"
+      );
     }
   };
 
@@ -75,15 +104,28 @@ function AddItemForm({ onAdd, onUpdate, onClose, editingItem }) {
     setImageStatus("error");
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
 
-    if (!formData.title.trim()) {
+    // Read everything through String() first: values loaded from MongoDB
+    // can be Numbers (e.g. `year`), and calling `.trim()` on a Number
+    // throws "formData.year.trim is not a function".
+    const title = String(formData.title || "").trim();
+    const genre = String(formData.genre || "").trim();
+    const poster = String(formData.poster || "").trim();
+    const year = String(formData.year || "").trim();
+    const runtime = String(formData.runtime || "").trim();
+    const director = String(formData.director || "").trim();
+    const description = String(
+      formData.description || ""
+    ).trim();
+
+    if (!title) {
       alert("Please enter a title.");
       return;
     }
 
-    if (!formData.genre.trim()) {
+    if (!genre) {
       alert("Please enter a genre.");
       return;
     }
@@ -93,38 +135,75 @@ function AddItemForm({ onAdd, onUpdate, onClose, editingItem }) {
       return;
     }
 
+    // `year` stays a string here on purpose: Library.jsx strips it when
+    // empty, and the backend casts a numeric string ("2024") to Number.
     const itemData = {
-      title: formData.title.trim(),
-      type: formData.type,
-      genre: formData.genre.trim(),
+      title,
+      type: formData.type || "Movie",
+      genre,
       rating: Number(formData.rating),
-      poster: formData.poster.trim(),
-      year: formData.year ? Number(formData.year) : "",
-      runtime: formData.runtime.trim(),
-      director: formData.director.trim(),
-      description: formData.description.trim(),
+      poster,
+      year,
+      runtime,
+      director,
+      description,
     };
 
-    if (editingItem) {
-      onUpdate({
-        ...editingItem,
-        ...itemData,
-      });
-    } else {
-      onAdd(itemData);
+    try {
+      if (editingItem) {
+        const itemId =
+          editingItem._id || editingItem.id;
+
+        if (!itemId) {
+          alert(
+            "Unable to update item: item ID is missing."
+          );
+          return;
+        }
+
+        await onUpdate({
+          ...editingItem,
+          ...itemData,
+          _id: itemId,
+        });
+      } else {
+        await onAdd(itemData);
+      }
+    } catch (error) {
+      alert(
+        error.message ||
+          "Something went wrong while saving the item."
+      );
     }
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(event) => event.stopPropagation()}>
-        <button type="button" className="close-button" onClick={onClose}>
+    <div
+      className="modal-overlay"
+      onClick={onClose}
+    >
+      <div
+        className="modal"
+        onClick={(event) =>
+          event.stopPropagation()
+        }
+      >
+        <button
+          type="button"
+          className="close-button"
+          onClick={onClose}
+        >
           ×
         </button>
 
-        <h2>{editingItem ? "Edit Movie / Book" : "Add Movie / Book"}</h2>
+        <h2>
+          {editingItem
+            ? "Edit Movie / Book"
+            : "Add Movie / Book"}
+        </h2>
 
         <form onSubmit={handleSubmit}>
+
           <div className="form-group">
             <label>Title</label>
 
@@ -140,9 +219,18 @@ function AddItemForm({ onAdd, onUpdate, onClose, editingItem }) {
           <div className="form-group">
             <label>Type</label>
 
-            <select name="type" value={formData.type} onChange={handleChange}>
-              <option value="Movie">Movie</option>
-              <option value="Book">Book</option>
+            <select
+              name="type"
+              value={formData.type}
+              onChange={handleChange}
+            >
+              <option value="Movie">
+                Movie
+              </option>
+
+              <option value="Book">
+                Book
+              </option>
             </select>
           </div>
 
@@ -166,22 +254,53 @@ function AddItemForm({ onAdd, onUpdate, onClose, editingItem }) {
               value={formData.rating}
               onChange={handleChange}
             >
-              <option value="">Select rating</option>
-              <option value="5">⭐ 5</option>
-              <option value="4.5">⭐ 4.5</option>
-              <option value="4">⭐ 4</option>
-              <option value="3.5">⭐ 3.5</option>
-              <option value="3">⭐ 3</option>
-              <option value="2.5">⭐ 2.5</option>
-              <option value="2">⭐ 2</option>
-              <option value="1.5">⭐ 1.5</option>
-              <option value="1">⭐ 1</option>
+              <option value="">
+                Select rating
+              </option>
+
+              <option value="5">
+                ⭐ 5
+              </option>
+
+              <option value="4.5">
+                ⭐ 4.5
+              </option>
+
+              <option value="4">
+                ⭐ 4
+              </option>
+
+              <option value="3.5">
+                ⭐ 3.5
+              </option>
+
+              <option value="3">
+                ⭐ 3
+              </option>
+
+              <option value="2.5">
+                ⭐ 2.5
+              </option>
+
+              <option value="2">
+                ⭐ 2
+              </option>
+
+              <option value="1.5">
+                ⭐ 1.5
+              </option>
+
+              <option value="1">
+                ⭐ 1
+              </option>
             </select>
           </div>
 
           {/* POSTER URL */}
           <div className="form-group">
-            <label>Poster / Cover Image URL</label>
+            <label>
+              Poster / Cover Image URL
+            </label>
 
             <input
               type="url"
@@ -192,8 +311,8 @@ function AddItemForm({ onAdd, onUpdate, onClose, editingItem }) {
             />
 
             <small>
-              Paste a direct image link. The URL does not need to end with .jpg
-              or .png.
+              Paste a direct image link. The URL does
+              not need to end with .jpg or .png.
             </small>
 
             {/* LIVE IMAGE PREVIEW */}
@@ -214,12 +333,20 @@ function AddItemForm({ onAdd, onUpdate, onClose, editingItem }) {
                     height: "190px",
                     objectFit: "cover",
                     borderRadius: "10px",
-                    border: "1px solid rgba(255,255,255,0.2)",
-                    display: imageStatus === "error" ? "none" : "inline-block",
+                    border:
+                      "1px solid rgba(255,255,255,0.2)",
+                    display:
+                      imageStatus === "error"
+                        ? "none"
+                        : "inline-block",
                   }}
                 />
 
-                {imageStatus === "loading" && <p>Loading poster...</p>}
+                {imageStatus === "loading" && (
+                  <p>
+                    Loading poster...
+                  </p>
+                )}
 
                 {imageStatus === "success" && (
                   <p
@@ -241,7 +368,8 @@ function AddItemForm({ onAdd, onUpdate, onClose, editingItem }) {
                   >
                     ✕ Image could not be loaded.
                     <br />
-                    Make sure this is a direct image URL.
+                    Make sure this is a direct image
+                    URL.
                   </p>
                 )}
               </div>
@@ -297,14 +425,26 @@ function AddItemForm({ onAdd, onUpdate, onClose, editingItem }) {
           </div>
 
           <div className="form-buttons">
-            <button type="button" className="cancel-button" onClick={onClose}>
+
+            <button
+              type="button"
+              className="cancel-button"
+              onClick={onClose}
+            >
               Cancel
             </button>
 
-            <button type="submit" className="submit-button">
-              {editingItem ? "Update Item" : "Add Item"}
+            <button
+              type="submit"
+              className="submit-button"
+            >
+              {editingItem
+                ? "Update Item"
+                : "Add Item"}
             </button>
+
           </div>
+
         </form>
       </div>
     </div>

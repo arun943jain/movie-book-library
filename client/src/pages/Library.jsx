@@ -235,9 +235,14 @@ function Library() {
 
   // PUT /api/items/:id — save edits, then refresh the list.
   const updateItem = async (updatedItem) => {
-    try {
-      const itemId = updatedItem._id || updatedItem.id;
+    const itemId = updatedItem._id || updatedItem.id;
 
+    if (!itemId) {
+      alert("Unable to update item: item ID is missing.");
+      return;
+    }
+
+    try {
       const response = await fetch(`${API_BASE_URL}/${itemId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -272,7 +277,12 @@ function Library() {
     setEditingItem(null);
   };
 
+  // Never navigate outside the valid page range.
   const changePage = (page) => {
+    if (page < 1 || page > totalPages) {
+      return;
+    }
+
     setCurrentPage(page);
 
     window.scrollTo({
@@ -663,19 +673,23 @@ function Library() {
 
                 <p>
                   <strong>Release Year:</strong>{" "}
-                  {selectedItem.releaseYear ||
-                    selectedItem.year ||
+                  {selectedItem.year ||
+                    selectedItem.releaseYear ||
                     "Not specified"}
                 </p>
 
                 <p>
                   <strong>Runtime:</strong>{" "}
-                  {selectedItem.runtime || "Not specified"}
+                  {selectedItem.runtime ||
+                    selectedItem.runtimeOrPages ||
+                    "Not specified"}
                 </p>
 
                 <p>
                   <strong>Director:</strong>{" "}
-                  {selectedItem.director || "Not specified"}
+                  {selectedItem.director ||
+                    selectedItem.directorOrAuthor ||
+                    "Not specified"}
                 </p>
               </div>
 
