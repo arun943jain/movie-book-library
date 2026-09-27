@@ -1,11 +1,6 @@
 import { useEffect, useState } from "react";
 
-function AddItemForm({
-  onAdd,
-  onUpdate,
-  onClose,
-  editingItem,
-}) {
+function AddItemForm({ onAdd, onUpdate, onClose, editingItem }) {
   const [formData, setFormData] = useState({
     title: "",
     type: "Movie",
@@ -33,10 +28,11 @@ function AddItemForm({
           editingItem.imageUrl ||
           editingItem.image ||
           "",
-        year:
-          editingItem.year ||
-          editingItem.releaseYear ||
-          "",
+        year: editingItem.year
+          ? String(editingItem.year)
+          : editingItem.releaseYear
+            ? String(editingItem.releaseYear)
+            : "",
         runtime: editingItem.runtime || "",
         director: editingItem.director || "",
         description: editingItem.description || "",
@@ -103,7 +99,7 @@ function AddItemForm({
       genre: formData.genre.trim(),
       rating: Number(formData.rating),
       poster: formData.poster.trim(),
-      year: formData.year.trim(),
+      year: formData.year ? Number(formData.year) : "",
       runtime: formData.runtime.trim(),
       director: formData.director.trim(),
       description: formData.description.trim(),
@@ -120,30 +116,15 @@ function AddItemForm({
   };
 
   return (
-    <div
-      className="modal-overlay"
-      onClick={onClose}
-    >
-      <div
-        className="modal"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <button
-          type="button"
-          className="close-button"
-          onClick={onClose}
-        >
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(event) => event.stopPropagation()}>
+        <button type="button" className="close-button" onClick={onClose}>
           ×
         </button>
 
-        <h2>
-          {editingItem
-            ? "Edit Movie / Book"
-            : "Add Movie / Book"}
-        </h2>
+        <h2>{editingItem ? "Edit Movie / Book" : "Add Movie / Book"}</h2>
 
         <form onSubmit={handleSubmit}>
-
           <div className="form-group">
             <label>Title</label>
 
@@ -159,11 +140,7 @@ function AddItemForm({
           <div className="form-group">
             <label>Type</label>
 
-            <select
-              name="type"
-              value={formData.type}
-              onChange={handleChange}
-            >
+            <select name="type" value={formData.type} onChange={handleChange}>
               <option value="Movie">Movie</option>
               <option value="Book">Book</option>
             </select>
@@ -204,9 +181,7 @@ function AddItemForm({
 
           {/* POSTER URL */}
           <div className="form-group">
-            <label>
-              Poster / Cover Image URL
-            </label>
+            <label>Poster / Cover Image URL</label>
 
             <input
               type="url"
@@ -217,8 +192,8 @@ function AddItemForm({
             />
 
             <small>
-              Paste a direct image link. The URL does not need
-              to end with .jpg or .png.
+              Paste a direct image link. The URL does not need to end with .jpg
+              or .png.
             </small>
 
             {/* LIVE IMAGE PREVIEW */}
@@ -240,18 +215,11 @@ function AddItemForm({
                     objectFit: "cover",
                     borderRadius: "10px",
                     border: "1px solid rgba(255,255,255,0.2)",
-                    display:
-                      imageStatus === "error"
-                        ? "none"
-                        : "inline-block",
+                    display: imageStatus === "error" ? "none" : "inline-block",
                   }}
                 />
 
-                {imageStatus === "loading" && (
-                  <p>
-                    Loading poster...
-                  </p>
-                )}
+                {imageStatus === "loading" && <p>Loading poster...</p>}
 
                 {imageStatus === "success" && (
                   <p
@@ -329,26 +297,14 @@ function AddItemForm({
           </div>
 
           <div className="form-buttons">
-
-            <button
-              type="button"
-              className="cancel-button"
-              onClick={onClose}
-            >
+            <button type="button" className="cancel-button" onClick={onClose}>
               Cancel
             </button>
 
-            <button
-              type="submit"
-              className="submit-button"
-            >
-              {editingItem
-                ? "Update Item"
-                : "Add Item"}
+            <button type="submit" className="submit-button">
+              {editingItem ? "Update Item" : "Add Item"}
             </button>
-
           </div>
-
         </form>
       </div>
     </div>

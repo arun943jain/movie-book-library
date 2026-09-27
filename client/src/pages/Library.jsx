@@ -1,5 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import AddItemForm from "../components/AddItemForm";
+
+// Backend base URL. Override it with a `client/.env` file:
+//   VITE_API_URL=http://localhost:5000/api/items
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:5000/api/items";
 
 function Library() {
   const [showForm, setShowForm] = useState(false);
@@ -10,58 +15,217 @@ function Library() {
   const [search, setSearch] = useState("");
   const [genre, setGenre] = useState("");
   const [rating, setRating] = useState("");
+  const [itemType, setItemType] = useState("");
+  const [sort, setSort] = useState("newest");
 
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalItems, setTotalItems] = useState(0);
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   const itemsPerPage = 4;
 
-  useEffect(() => {
-    const savedItems = localStorage.getItem("movieBookLibrary");
+  // Debounce the search box so we don't hit the API on every keystroke.
+  // The input stays responsive (`search`), the API uses `debouncedSearch`.
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
 
-    if (savedItems) {
-      try {
-        setItems(JSON.parse(savedItems));
-      } catch {
-        setItems([]);
-      }
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  // Backend documents use `_id`. The UI below (keys, edit, delete,
+  // details modal) works with `id`, so normalize once after fetching.
+  const normalizeItem = (item) => ({
+    ...item,
+    id: item._id || item.id,
+  });
+
+  // Backend `year` is a Number: drop an empty string so Mongoose never
+  // receives `""` (which would fail number casting). Also strip
+  // client-only / read-only keys before POST/PUT.
+  const sanitizePayload = (item) => {
+    const payload = { ...item };
+
+    delete payload.id;
+    delete payload._id;
+    delete payload.__v;
+    delete payload.createdAt;
+    delete payload.updatedAt;
+
+    if (payload.year === "" || payload.year === undefined) {
+      delete payload.year;
     }
-  }, []);
 
-  useEffect(() => {
-    localStorage.setItem("movieBookLibrary", JSON.stringify(items));
-  }, [items]);
-
-  const addItem = (newItem) => {
-    const itemWithId = {
-      ...newItem,
-      id: Date.now(),
-    };
-
-    setItems((previousItems) => [
-      ...previousItems,
-      itemWithId,
-    ]);
-
-    setShowForm(false);
-    setCurrentPage(1);
+    return payload;
   };
 
-  const deleteItem = (id) => {
+  // Build backend query string from the UI controls:
+  // ?search=&genre=&type=&rating=&sort=&page=&limit=
+  const buildQuery = useCallback(() => {
+    const params = new URLSearchParams();
+
+    if (debouncedSearch.trim()) {
+      params.set("search", debouncedSearch.trim());
+    }
+
+    if (genre) {
+      params.set("genre", genre);
+    }
+
+    if (itemType) {
+      params.set("type", itemType);
+    }
+
+    if (rating) {
+      params.set("rating", rating);
+    }
+
+    if (sort) {
+      params.set("sort", sort);
+    }
+
+    params.set("page", String(currentPage));
+    params.set("limit", String(itemsPerPage));
+
+    return params.toString();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, genre, itemType, rating, sort, currentPage]);
+
+  // GET /api/items — load the current page from MongoDB.
+  const fetchItems = useCallback(
+    async (signal) => {
+      setLoading(true);
+      setError("");
+
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}?${buildQuery()}`,
+          { signal }
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            `Server responded with status ${response.status}.`
+          );
+        }
+
+        const data = await response.json();
+
+        setItems((data.items || []).map(normalizeItem));
+        setTotalPages(data.totalPages || 0);
+        setTotalItems(data.totalItems || 0);
+      } catch (err) {
+        // Ignore cancellations from React StrictMode / fast typing.
+        if (err.name === "AbortError") {
+          return;
+        }
+
+        setItems([]);
+        setTotalPages(0);
+        setTotalItems(0);
+        setError(
+          "Could not load your library. Please check that the backend is running (http://localhost:5000) and try again."
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    [buildQuery]
+  );
+
+  // Load from the database on mount and whenever filters/sort/page change.
+  useEffect(() => {
+    const controller = new AbortController();
+
+    fetchItems(controller.signal);
+
+    return () => controller.abort();
+  }, [fetchItems]);
+
+  // Keep the page in range when the result set shrinks
+  // (e.g. after deleting the last item on the last page).
+  useEffect(() => {
+    if (loading) {
+      return;
+    }
+
+    if (totalPages === 0) {
+      if (currentPage !== 1) {
+        setCurrentPage(1);
+      }
+    } else if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [totalPages, currentPage, loading]);
+
+  // POST /api/items — add a new movie/book, then show it immediately.
+  const addItem = async (newItem) => {
+    try {
+      const response = await fetch(API_BASE_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(sanitizePayload(newItem)),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.message || "Server rejected the new item."
+        );
+      }
+
+      setShowForm(false);
+
+      // Newest items sort first, so jump back to page 1.
+      // (If already there, refetch directly.)
+      if (currentPage !== 1) {
+        setCurrentPage(1);
+      } else {
+        await fetchItems();
+      }
+    } catch (err) {
+      if (err.name === "AbortError") {
+        return;
+      }
+
+      alert(`Could not add item: ${err.message}`);
+    }
+  };
+
+  // DELETE /api/items/:id — remove from the database, then refresh.
+  const deleteItem = async (id) => {
     const confirmDelete = window.confirm(
       "Are you sure you want to delete this item?"
     );
 
     if (!confirmDelete) return;
 
-    setItems((previousItems) =>
-      previousItems.filter((item) => item.id !== id)
-    );
+    try {
+      const response = await fetch(`${API_BASE_URL}/${id}`, {
+        method: "DELETE",
+      });
 
-    if (selectedItem?.id === id) {
-      setSelectedItem(null);
+      if (!response.ok) {
+        throw new Error(
+          `Server responded with status ${response.status}.`
+        );
+      }
+
+      if (selectedItem?.id === id) {
+        setSelectedItem(null);
+      }
+
+      // Refresh; the clamp effect above fixes the page if it is now empty.
+      await fetchItems();
+    } catch (err) {
+      alert(`Could not delete item: ${err.message}`);
     }
-
-    setCurrentPage(1);
   };
 
   const editItem = (item) => {
@@ -69,18 +233,37 @@ function Library() {
     setShowForm(true);
   };
 
-  const updateItem = (updatedItem) => {
-    setItems((previousItems) =>
-      previousItems.map((item) =>
-        item.id === updatedItem.id ? updatedItem : item
-      )
-    );
+  // PUT /api/items/:id — save edits, then refresh the list.
+  const updateItem = async (updatedItem) => {
+    try {
+      const itemId = updatedItem._id || updatedItem.id;
 
-    setEditingItem(null);
-    setShowForm(false);
+      const response = await fetch(`${API_BASE_URL}/${itemId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(sanitizePayload(updatedItem)),
+      });
 
-    if (selectedItem?.id === updatedItem.id) {
-      setSelectedItem(updatedItem);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.message || "Server rejected the update."
+        );
+      }
+
+      const data = await response.json();
+      const savedItem = normalizeItem(data.data);
+
+      setEditingItem(null);
+      setShowForm(false);
+
+      if (selectedItem?.id === savedItem.id) {
+        setSelectedItem(savedItem);
+      }
+
+      await fetchItems();
+    } catch (err) {
+      alert(`Could not update item: ${err.message}`);
     }
   };
 
@@ -88,42 +271,6 @@ function Library() {
     setShowForm(false);
     setEditingItem(null);
   };
-
-  const filteredItems = items.filter((item) => {
-    const title = item.title || "";
-    const itemGenre = item.genre || "";
-
-    const matchesSearch = title
-      .toLowerCase()
-      .includes(search.toLowerCase());
-
-    const matchesGenre =
-      genre === "" ||
-      itemGenre.toLowerCase() === genre.toLowerCase();
-
-    const matchesRating =
-      rating === "" ||
-      Math.floor(Number(item.rating)) === Number(rating);
-
-    return matchesSearch && matchesGenre && matchesRating;
-  });
-
-  const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
-
-  useEffect(() => {
-    if (totalPages === 0) {
-      setCurrentPage(1);
-    } else if (currentPage > totalPages) {
-      setCurrentPage(totalPages);
-    }
-  }, [totalPages, currentPage]);
-
-  const startIndex = (currentPage - 1) * itemsPerPage;
-
-  const currentItems = filteredItems.slice(
-    startIndex,
-    startIndex + itemsPerPage
-  );
 
   const changePage = (page) => {
     setCurrentPage(page);
@@ -143,6 +290,10 @@ function Library() {
       ""
     ).trim();
   };
+
+  const hasActiveFilters = Boolean(
+    search.trim() || genre || itemType || rating
+  );
 
   return (
     <div className="library">
@@ -192,6 +343,18 @@ function Library() {
           </select>
 
           <select
+            value={itemType}
+            onChange={(e) => {
+              setItemType(e.target.value);
+              setCurrentPage(1);
+            }}
+          >
+            <option value="">All Types</option>
+            <option value="Movie">Movies</option>
+            <option value="Book">Books</option>
+          </select>
+
+          <select
             value={rating}
             onChange={(e) => {
               setRating(e.target.value);
@@ -205,25 +368,60 @@ function Library() {
             <option value="2">2 Stars</option>
             <option value="1">1 Star</option>
           </select>
+
+          <select
+            value={sort}
+            onChange={(e) => {
+              setSort(e.target.value);
+              setCurrentPage(1);
+            }}
+          >
+            <option value="newest">Newest First</option>
+            <option value="oldest">Oldest First</option>
+            <option value="rating">Top Rated</option>
+          </select>
         </div>
 
-        {filteredItems.length === 0 ? (
+        {loading && items.length === 0 && !error ? (
+          <div className="empty-library">
+            <div className="empty-icon">▣</div>
+
+            <h2>Loading your library...</h2>
+
+            <p>Fetching movies and books from the server.</p>
+          </div>
+        ) : error && items.length === 0 ? (
+          <div className="empty-library">
+            <div className="empty-icon">▣</div>
+
+            <h2>Something went wrong</h2>
+
+            <p>{error}</p>
+
+            <button
+              className="empty-add-button"
+              onClick={() => fetchItems()}
+            >
+              Retry
+            </button>
+          </div>
+        ) : totalItems === 0 ? (
           <div className="empty-library">
             <div className="empty-icon">▣</div>
 
             <h2>
-              {items.length === 0
-                ? "Your library is empty"
-                : "No matching items found"}
+              {hasActiveFilters
+                ? "No matching items found"
+                : "Your library is empty"}
             </h2>
 
             <p>
-              {items.length === 0
-                ? "Start building your collection by adding a movie or book."
-                : "Try changing your search or filters."}
+              {hasActiveFilters
+                ? "Try changing your search or filters."
+                : "Start building your collection by adding a movie or book."}
             </p>
 
-            {items.length === 0 && (
+            {!hasActiveFilters && (
               <button
                 className="empty-add-button"
                 onClick={() => {
@@ -238,7 +436,7 @@ function Library() {
         ) : (
           <>
             <div className="items-grid">
-              {currentItems.map((item) => {
+              {items.map((item) => {
                 const poster = getPoster(item);
 
                 return (
