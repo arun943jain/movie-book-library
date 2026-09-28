@@ -1,10 +1,11 @@
-# Movie Book Library — Presentation Content (15 slides)
+# Movie Book Library — Presentation Content (16 slides)
 
 ## Slide 1: Movie Book Library
 - Full Stack Web Application — React + Node.js + Express + MongoDB Atlas
 - Internship submission — Naviotech Solution Pvt Ltd
-- Team: Arun Jain (Backend, MongoDB, APIs, Integration) · Ansh (Frontend, UI) · Jheel (Docs, Report, PPT)
-> Notes: 30-second hook — one searchable library for movies and books, live on MongoDB Atlas.
+- Live: https://movie-book-library-1.onrender.com (API: https://movie-book-library-ii96.onrender.com)
+- Team: Arun Kumar Jain (Backend Developer & Integration Engineer) · Ansh (Frontend Developer) · Jheel (Documentation & Project Delivery)
+> Notes: 30-second hook — one searchable library for movies and books, live in production on Render + MongoDB Atlas.
 
 ## Slide 2: Introduction
 - Personal media collections outgrow notes and spreadsheets
@@ -37,6 +38,7 @@
 - Three tiers: React SPA → Express REST API (`/api/items`) → Mongoose → Atlas
 - Stateless JSON API, CORS enabled; controllers map query params to Mongo queries
 - Flow: filter change → query string → Mongo filter/sort/skip/limit → cards re-render
+- Hosting: frontend = Render Static Site, backend = Render Web Service, database = MongoDB Atlas
 [IMG: Architecture/system-architecture.png]
 > Notes: Walk the request-flow diagram on the next click if asked.
 
@@ -69,11 +71,11 @@
 
 ## Slide 11: Screenshots and Demo
 - Homepage + filters (S01), cards with Edit/Delete (S02), prefilled Edit form (S07)
-- Live demo order: search → filter → add → edit → delete
+- Live demo at https://movie-book-library-1.onrender.com — order: search → filter → add → edit → delete
 [IMG: Screenshots/S01-homepage-hero-search.png]
 [IMG: Screenshots/S02-library-cards-actions.png]
 [IMG: Screenshots/S07-edit-form-prefilled.png]
-> Notes: Do the live demo from this slide.
+> Notes: Do the live demo from this slide (see Slide 16 for URLs).
 
 ## Slide 12: Testing
 - `vite build` clean (19 modules); `oxlint` 0 errors
@@ -96,6 +98,15 @@
 ## Slide 15: Conclusion
 - All objectives met against live Atlas: CRUD, search, filters, sorting, pagination
 - Clean three-tier architecture with a zero-mapping UI↔API contract
-- Team: Arun (backend/integration) · Ansh (frontend/UI) · Jheel (docs/packaging)
+- Released live: frontend https://movie-book-library-1.onrender.com, backend https://movie-book-library-ii96.onrender.com
+- Team: Arun Kumar Jain (backend/integration/release) · Ansh (frontend/UI) · Jheel (docs/packaging)
 - Thank you — open for questions
 > Notes: Close on the alias contract as the engineering highlight.
+
+## Slide 16: Live Deployment & Release
+- Frontend: Render Static Site — https://movie-book-library-1.onrender.com
+- Backend: Render Web Service — https://movie-book-library-ii96.onrender.com (health endpoint verified live)
+- Database: MongoDB Atlas (`movie.items`); frontend built with production `VITE_API_URL`
+- Live demo order: search → filter → add → edit → delete, then confirm in Atlas
+- No CRUD, UI or schema changes were needed for release
+> Notes: Open both URLs live from this slide; expect a cold-start delay on the free tier.

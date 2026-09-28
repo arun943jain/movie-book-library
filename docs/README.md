@@ -4,6 +4,20 @@ A full-stack Movie & Book Library app: browse, search, filter, sort, add,
 edit and delete movies and books with poster cards and star ratings, backed
 by REST APIs and MongoDB Atlas.
 
+## Live Deployment
+
+| Layer    | Platform            | URL                                                    |
+|----------|---------------------|--------------------------------------------------------|
+| Frontend | Render Static Site  | `https://movie-book-library-1.onrender.com`            |
+| Backend  | Render Web Service  | `https://movie-book-library-ii96.onrender.com`         |
+| Database | MongoDB Atlas       | database `movie`, collection `items`                   |
+
+Backend health check: `GET https://movie-book-library-ii96.onrender.com/`
+returns `{"success": true, "message": "Movie & Book Library API is running"}`.
+The deployed frontend is built with
+`VITE_API_URL=https://movie-book-library-ii96.onrender.com/api/items`,
+so every search, filter, sort, page and CRUD action runs against production data.
+
 ## Features
 
 - View library items as poster cards (title, type badge, genre, ⭐ rating / 5)
@@ -58,7 +72,7 @@ movie-book-library/
 
 ## Installation
 
-### Backend
+### Local Setup — Backend
 
 ```bash
 cd server
@@ -67,7 +81,7 @@ cp .env.example .env   # set MONGO_URI and PORT
 npm run dev            # http://localhost:5000
 ```
 
-### Frontend
+### Local Setup — Frontend
 
 ```bash
 cd client
@@ -76,15 +90,33 @@ cp .env.example .env   # optional; default API URL is baked in
 npm run dev            # http://localhost:5173
 ```
 
-Run the backend first, then the frontend.
+Run the backend first, then the frontend. (The sections above are for
+local development only — production runs at the Live Deployment URLs.)
+
+## Deployment Architecture
+
+```text
+Browser
+  │  https://movie-book-library-1.onrender.com  (Render Static Site: Vite build)
+  ▼
+https://movie-book-library-ii96.onrender.com/api/items  (Render Web Service: Node + Express)
+  ▼
+MongoDB Atlas — database `movie`, collection `items`
+```
+
+Production workflow: the frontend's filter/sort/page controls build the API
+query string; the Render web service translates it into MongoDB queries and
+returns the paginated envelope; `POST`/`PUT`/`DELETE` refetch the list so the
+UI always reflects Atlas data. CORS is open on the API, so the deployed
+static site is accepted without extra configuration.
 
 ## Environment Variables
 
-| File          | Variable     | Example                                                        |
-|---------------|--------------|----------------------------------------------------------------|
-| `server/.env` | `MONGO_URI`  | `mongodb+srv://<user>:<pass>@cluster0.xxxxx.mongodb.net/movie` |
-| `server/.env` | `PORT`       | `5000`                                                         |
-| `client/.env` | `VITE_API_URL` | `http://localhost:5000/api/items`                            |
+| File            | Variable       | Local example                                                  | Production value                                                     |
+|-----------------|----------------|----------------------------------------------------------------|----------------------------------------------------------------------|
+| `server/.env`   | `MONGO_URI`    | `mongodb+srv://<user>:<pass>@cluster0.xxxxx.mongodb.net/movie` | Existing Atlas string (Render dashboard secret, never committed)     |
+| `server/.env`   | `PORT`         | `5000`                                                         | Auto-injected by Render                                              |
+| `client/.env`   | `VITE_API_URL` | `http://localhost:5000/api/items`                              | `https://movie-book-library-ii96.onrender.com/api/items` (Vercel/Render dashboard, set before build) |
 
 ## API Endpoints
 
@@ -118,13 +150,45 @@ Every item additionally carries `runtime` (= `runtimeOrPages`) and
 4. Mongoose revalidates every write; API failures surface as friendly
    loading/error/empty UI states.
 
-## Team Contributions
+## Team Members
 
-| Name      | Contribution                                                      |
-|-----------|-------------------------------------------------------------------|
-| Arun Jain | Backend development, MongoDB integration, API development, frontend–backend integration |
-| Ansh      | React frontend development and UI                                 |
-| Jheel     | Documentation, report, PPT, project packaging                     |
+| Name            | Role                                |
+|-----------------|-------------------------------------|
+| Arun Kumar Jain | Backend Developer & Integration Engineer |
+| Ansh            | Frontend Developer                  |
+| Jheel           | Documentation & Project Delivery    |
+
+## Contribution Section
+
+**Arun Kumar Jain — Backend Developer & Integration Engineer**
+- Designed and implemented Node.js + Express backend
+- MongoDB database integration
+- CRUD APIs
+- Search, filter and pagination APIs
+- Backend testing
+- Frontend-backend integration
+- Deployment support
+- Final project integration and release
+
+**Ansh — Frontend Developer**
+- React frontend development
+- UI design
+- Forms and validation
+- Movie and Book cards
+- Edit/Delete UI
+- Search and filter interface
+- Frontend bug fixes
+- Frontend deployment support
+
+**Jheel — Documentation & Project Delivery**
+- Project report
+- PPT preparation
+- Architecture diagrams
+- Screenshots organization
+- README preparation
+- Final documentation
+- Deployment documentation
+- Final submission package
 
 ## Future Scope
 
@@ -139,4 +203,7 @@ Every item additionally carries `runtime` (= `runtimeOrPages`) and
 
 A complete, integrated React/Express/MongoDB CRUD application: responsive
 UI, validated REST APIs, Atlas persistence, and verified search, filter,
-sort and pagination — ready for evaluation and extension.
+sort and pagination — live in production at
+https://movie-book-library-1.onrender.com
+(backed by https://movie-book-library-ii96.onrender.com),
+ready for evaluation and extension.
