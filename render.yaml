@@ -1,0 +1,19 @@
+# Render Blueprint for the Movie Book Library backend.
+# Docs: https://render.com/docs/blueprint-spec
+# Usage: Render Dashboard → New → Blueprint → select this repo.
+# NOTE: apply this file from a branch that contains server/
+# (e.g. feature/arun-backend, or main after merge). The backend serves
+# the frontend's /api/items traffic; the frontend itself deploys on Vercel.
+services:
+  - type: web
+    name: movie-book-library-api
+    runtime: node
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGO_URI
+        sync: false # <-- set in Render dashboard (existing Atlas connection string)

@@ -1,7 +1,11 @@
 import { useEffect, useState } from "react";
 import AddItemForm from "../components/AddItemForm";
 
-const API_URL = "http://localhost:5000/api/items";
+// Backend base URL. In production this comes from the Vercel environment
+// variable VITE_API_URL (set in the Vercel dashboard before deploying).
+// Local development falls back to the local Express server.
+const API_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:5000/api/items";
 
 function Library() {
   const [showForm, setShowForm] = useState(false);
